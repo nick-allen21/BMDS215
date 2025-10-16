@@ -59,9 +59,26 @@ def summarize_sepsis(dev_sirs: pd.DataFrame, all_infections: pd.DataFrame):
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Merge SIRS with infections on admission identifiers
+    sepsis_summary = pd.merge(
+        dev_sirs,
+        all_infections,
+        on=["subject_id", "hadm_id"],
+        how="left",
+    )
+
+    # Replace missing infection indicators with 0
+    for col in ["has_icd9_infection", "has_note_infection"]:
+        if col in sepsis_summary.columns:
+            sepsis_summary[col] = (
+                sepsis_summary[col]
+                .replace({True: 1, False: 0})
+                .fillna(0)
+                .astype(int)
+            )
+
+    # Compute sepsis status inplace
+    get_sepsis_status(sepsis_summary)
     # ==================== YOUR CODE HERE ====================
     
 
@@ -98,9 +115,21 @@ def get_sepsis_status(sepsis_summary: pd.DataFrame) -> None:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Count how many SIRS criteria are met
+    criteria_cols = [
+        c for c in ["criteria_1", "criteria_2", "criteria_3", "criteria_4"] if c in sepsis_summary.columns
+    ]
+    num_criteria = sepsis_summary[criteria_cols].fillna(False).astype(bool).sum(axis=1)
+
+    # Infection present if either source indicates infection
+    has_icd9 = sepsis_summary.get("has_icd9_infection", 0)
+    has_notes = sepsis_summary.get("has_note_infection", 0)
+    infection_present = (
+        pd.Series(has_icd9).fillna(0).astype(int).gt(0)
+        | pd.Series(has_notes).fillna(0).astype(int).gt(0)
+    )
+
+    sepsis_summary["sepsis_status"] = (num_criteria >= 2) & infection_present
     # ==================== YOUR CODE HERE ====================
     
 
@@ -155,9 +184,28 @@ def summarize_severe_sepsis(dev_sepsis: pd.DataFrame, organ_dys: pd.DataFrame):
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    severe_sepsis_summary = pd.merge(
+        dev_sepsis,
+        organ_dys,
+        on=["subject_id", "hadm_id"],
+        how="left",
+    )
+
+    # Ensure organ dysfunction indicator present and clean
+    if "has_organ_dysfunction" in severe_sepsis_summary.columns:
+        severe_sepsis_summary["has_organ_dysfunction"] = (
+            severe_sepsis_summary["has_organ_dysfunction"]
+            .replace({True: 1, False: 0})
+            .fillna(0)
+            .astype(int)
+        )
+    else:
+        severe_sepsis_summary["has_organ_dysfunction"] = 0
+
+    severe_sepsis_summary["severe_sepsis_status"] = (
+        severe_sepsis_summary.get("sepsis_status", False).astype(bool)
+        & severe_sepsis_summary["has_organ_dysfunction"].astype(int).gt(0)
+    )
     # ==================== YOUR CODE HERE ====================
     
 
@@ -228,9 +276,71 @@ def summarize_septic_shock(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # IDs and time key
+    keys = ["subject_id", "hadm_id", "icustay_id", "charttime"]
+
+    # Keep minimal columns and coerce to expected types
+    base_cols = keys + ["severe_sepsis_status"]
+    base = dev_severe_sepsis[base_cols].copy() if "severe_sepsis_status" in dev_severe_sepsis.columns else dev_severe_sepsis[keys].copy()
+
+    h = hypotension_labels.copy()
+    h = h[keys + ["hypotension"]] if "hypotension" in h.columns else h.assign(hypotension=False)[keys + ["hypotension"]]
+    # Coerce hypotension to boolean
+    if h["hypotension"].dtype != bool:
+        h["hypotension"] = (
+            h["hypotension"]
+            .replace({True: True, False: False, "TRUE": True, "FALSE": False, 1: True, 0: False})
+            .fillna(False)
+            .astype(bool)
+        )
+
+    f = fluids_all.copy()
+    f = f[keys + ["adequate_fluid"]] if "adequate_fluid" in f.columns else f.assign(adequate_fluid=False)[keys + ["adequate_fluid"]]
+    # Coerce adequate_fluid to boolean
+    if f["adequate_fluid"].dtype != bool:
+        f["adequate_fluid"] = (
+            f["adequate_fluid"]
+            .replace({True: True, False: False, "TRUE": True, "FALSE": False, 1: True, 0: False})
+            .fillna(False)
+            .astype(bool)
+        )
+
+    # Drop any exact duplicate key rows to avoid row-multiplication on merge
+    base = base.drop_duplicates(subset=keys, keep="last")
+    h = h.drop_duplicates(subset=keys, keep="last")
+    f = f.drop_duplicates(subset=keys, keep="last")
+
+    # Full outer merge of all three sources
+    merged = pd.merge(base, h, on=keys, how="outer")
+    merged = pd.merge(merged, f, on=keys, how="outer")
+
+    # Sort for LOCF and forward-fill within subject/hadm/icu groups
+    merged = merged.sort_values(keys)
+    grp = ["subject_id", "hadm_id", "icustay_id"]
+
+    indicator_cols = []
+    if "severe_sepsis_status" in merged.columns:
+        indicator_cols.append("severe_sepsis_status")
+    indicator_cols += [c for c in ["hypotension", "adequate_fluid"] if c in merged.columns]
+
+    if indicator_cols:
+        merged[indicator_cols] = merged.groupby(grp, sort=False)[indicator_cols].ffill()
+
+    # Fill any remaining missing indicators with False
+    for c in indicator_cols:
+        merged[c] = merged[c].fillna(False).astype(bool)
+
+    # Compute septic shock: severe sepsis AND hypotension AND adequate fluid
+    # If severe_sepsis_status isn't present for a row, treat as False
+    sev = merged.get("severe_sepsis_status", False)
+    hypot = merged.get("hypotension", False)
+    fluid = merged.get("adequate_fluid", False)
+    merged["septic_shock_status"] = sev.astype(bool) & hypot.astype(bool) & fluid.astype(bool)
+
+    # Return the 8 expected columns, ordered
+    cols_out = keys + ["severe_sepsis_status", "hypotension", "adequate_fluid", "septic_shock_status"]
+    septic_shock_summary = merged[cols_out].sort_values(keys).reset_index(drop=True)
+
     # ==================== YOUR CODE HERE ====================
     
 

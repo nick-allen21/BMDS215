@@ -75,8 +75,17 @@ def summarize_by_mean(
 
     # ==================== YOUR CODE HERE ====================
     
-    # TODO: Implement
-    
+    if column_to_summarize not in df.columns:
+        raise ValueError(f"Column {column_to_summarize} not found in DataFrame")
+
+    # If columns_to_group_by is empty, set it to all columns except column_to_summarize
+    if columns_to_group_by == []:
+        columns_to_group_by = df.columns.tolist()
+
+    summarized_df = df.groupby(columns_to_group_by).mean()[column_to_summarize]
+
+    summarized_df = summarized_df.reset_index() # Reset the index to get a single level of column names
+
     # ==================== YOUR CODE HERE ====================
     
 
@@ -137,8 +146,18 @@ def pivot_wide(
 
     # ==================== YOUR CODE HERE ====================
     
-    # TODO: Implement
-    
+    if index_columns is None:
+        index_columns = df.columns.tolist()
+
+    if columns not in df.columns:
+        raise ValueError(f"Column {columns} not found in DataFrame")
+
+    if values not in df.columns:
+        raise ValueError(f"Column {values} not found in DataFrame")
+
+    wide_df = df.pivot_table(index=index_columns, columns=columns, values=values, aggfunc='mean')
+    wide_df = wide_df.reset_index() # Reset the index to get a single level of column names
+
     # ==================== YOUR CODE HERE ====================
     
 
@@ -180,9 +199,12 @@ def merge_dataframes(dataframe_A: pd.DataFrame, dataframe_B: pd.DataFrame):
     merged_df = None
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    merged_df = pd.merge(
+        dataframe_A,
+        dataframe_B,
+        on=["subject_id", "hadm_id", "icustay_id", "charttime"],
+        how="outer",
+    )
     # ==================== YOUR CODE HERE ====================
     
 
@@ -225,7 +247,13 @@ def impute_missing(dataframe: pd.DataFrame):
 
     # ==================== YOUR CODE HERE ====================
     
-    # TODO: Implement
+    imputed_df = dataframe.copy()
+    imputed_df = imputed_df.sort_values(["subject_id", "hadm_id", "icustay_id", "charttime"])
+    group_cols = ["subject_id", "hadm_id", "icustay_id"]
+    value_cols = [c for c in imputed_df.columns if c not in group_cols + ["charttime"]]
+    imputed_df[value_cols] = imputed_df.groupby(group_cols, sort=False)[value_cols].transform(
+        lambda s: s.fillna(method="ffill")
+    )
     
     # ==================== YOUR CODE HERE ====================
     

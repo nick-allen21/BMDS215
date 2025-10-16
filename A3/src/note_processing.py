@@ -72,9 +72,22 @@ def summarize_notes(notes: pd.DataFrame, indicator_column_name: str) -> pd.DataF
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Keep only relevant columns
+    df = notes[["subject_id", "hadm_id", "note_text"]].copy()
+
+    # Case-insensitive search for any of the SEARCH_STRINGS in note_text
+    pattern = "|".join([re.escape(s) for s in SEARCH_STRINGS])
+    has_match = df["note_text"].str.contains(pattern, case=False, regex=True, na=False)
+
+    # Aggregate to unique (subject_id, hadm_id) with boolean indicator
+    grouped = (
+        df.assign(_match=has_match)
+        .groupby(["subject_id", "hadm_id"], as_index=False)["_match"]
+        .any()
+    )
+    infection_df = grouped.rename(columns={"_match": indicator_column_name})[
+        ["subject_id", "hadm_id", indicator_column_name]
+    ]
     # ==================== YOUR CODE HERE ====================
     
 

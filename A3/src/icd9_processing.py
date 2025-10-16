@@ -194,9 +194,23 @@ def summarize_icd9(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Restrict to the requested subject_ids and keep relevant columns
+    filtered = diagnoses[diagnoses["subject_id"].isin(subject_ids)][
+        ["subject_id", "hadm_id", "icd9_code"]
+    ].copy()
+
+    # Determine if each row's icd9_code starts with ANY of the prefixes
+    # Null codes should not count as matches
+    matches = filtered["icd9_code"].str.startswith(tuple(icd9_prefixes), na=False)
+
+    # Aggregate to unique (subject_id, hadm_id) with indicator 1/0
+    grouped = (
+        filtered.assign(_match=matches)
+        .groupby(["subject_id", "hadm_id"], as_index=False)["_match"]
+        .any()
+    )
+    grouped[indicator_column_name] = grouped["_match"].astype(int)
+    icd9_df = grouped[["subject_id", "hadm_id", indicator_column_name]]
     # ==================== YOUR CODE HERE ====================
     
 

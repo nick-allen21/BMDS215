@@ -61,9 +61,41 @@ def summarize_sirs(df: pd.DataFrame) -> pd.DataFrame:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Create a working copy with only the columns needed to compute SIRS
+    sirs_df = df[
+        [
+            "subject_id",
+            "hadm_id",
+            "icustay_id",
+            "charttime",
+            "TempC",
+            "HeartRate",
+            "RespRate",
+            "PaCO2",
+            "WBC",
+            "BANDS",
+        ]
+    ].copy()
+
+    # Compute each criteria inplace
+    get_criteria_1(sirs_df)
+    get_criteria_2(sirs_df)
+    get_criteria_3(sirs_df)
+    get_criteria_4(sirs_df)
+
+    # Return only required columns
+    sirs_df = sirs_df[
+        [
+            "subject_id",
+            "hadm_id",
+            "icustay_id",
+            "charttime",
+            "criteria_1",
+            "criteria_2",
+            "criteria_3",
+            "criteria_4",
+        ]
+    ]
     # ==================== YOUR CODE HERE ====================
     
 
@@ -106,9 +138,7 @@ def get_criteria_1(sirs_df: pd.DataFrame) -> None:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    sirs_df["criteria_1"] = ((sirs_df["TempC"] < 36) | (sirs_df["TempC"] > 38)).fillna(False)
     # ==================== YOUR CODE HERE ====================
     
 
@@ -148,9 +178,7 @@ def get_criteria_2(sirs_df: pd.DataFrame) -> None:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    sirs_df["criteria_2"] = (sirs_df["HeartRate"] > 90).fillna(False)
     # ==================== YOUR CODE HERE ====================
     
 
@@ -190,9 +218,9 @@ def get_criteria_3(sirs_df: pd.DataFrame) -> None:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    present = sirs_df["RespRate"].notna() & sirs_df["PaCO2"].notna()
+    cond = (sirs_df["RespRate"] > 20) | (sirs_df["PaCO2"] < 32)
+    sirs_df["criteria_3"] = present & cond
     # ==================== YOUR CODE HERE ====================
     
 
@@ -235,8 +263,8 @@ def get_criteria_4(sirs_df: pd.DataFrame) -> None:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    present = sirs_df["WBC"].notna() & sirs_df["BANDS"].notna()
+    cond = (sirs_df["WBC"] > 12) | (sirs_df["WBC"] < 4) | (sirs_df["BANDS"] > 10)
+    sirs_df["criteria_4"] = present & cond
     # ==================== YOUR CODE HERE ====================
     

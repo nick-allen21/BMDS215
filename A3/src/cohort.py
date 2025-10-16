@@ -56,10 +56,13 @@ def filter_df(df: pd.DataFrame, filter_col: str, value_list: List[Any]) -> pd.Da
 
     # ==================== YOUR CODE HERE ====================
     if filter_col not in df.columns:
-    
-    
+        raise ValueError(f"Column '{filter_col}' not found in DataFrame")
+
+    if not value_list:
+        return df.iloc[0:0].copy()
+
+    filtered_df = df[df[filter_col].isin(value_list)].copy()
     # ==================== YOUR CODE HERE ====================
-    
     # Return the filtered DataFrame
     return filtered_df
 
@@ -109,7 +112,15 @@ def get_dev_cohort_list(df: pd.DataFrame, num_subject_ids: int = 1000):
 
     # ==================== YOUR CODE HERE ====================
     
-    # TODO: Implement
+    if num_subject_ids <= 0:
+        return []
+
+    if num_subject_ids >= len(df['subject_id'].unique()):
+        return df['subject_id'].unique().tolist()
+
+    subject_ids = df['subject_id'].unique().tolist()
+    subject_ids.sort()
+    return subject_ids[:num_subject_ids]
     
     # ==================== YOUR CODE HERE ====================
     
@@ -158,9 +169,27 @@ def join_infections(df_1: pd.DataFrame, df_2: pd.DataFrame):
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Outer merge to keep all unique (subject_id, hadm_id) pairs
+    joined_df = pd.merge(
+        df_1, df_2, on=["subject_id", "hadm_id"], how="outer"
+    )
+
+    # Replace missing values with 0 and coerce indicators to integers
+    id_cols = ["subject_id", "hadm_id"]
+    for col in joined_df.columns:
+        if col in id_cols:
+            continue
+        # First handle boolean columns cleanly
+        if joined_df[col].dtype == bool:
+            joined_df[col] = joined_df[col].fillna(False).astype(int)
+        else:
+            # Map True/False if present, then fill and cast to int
+            joined_df[col] = (
+                joined_df[col]
+                .replace({True: 1, False: 0})
+                .fillna(0)
+                .astype(int)
+            )
     # ==================== YOUR CODE HERE ====================
     
 
