@@ -90,7 +90,7 @@ if __name__ == "__main__":
     # Get the assignment name
     A_num = source_directory.split("/")[-1]
 
-    if SUNET_ID == "":
+    if SUNET_ID == "nallen21":
         raise ValueError(
             "Please specify your SUNet ID in the variable provided in the script."
         )
