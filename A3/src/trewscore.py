@@ -278,68 +278,34 @@ def summarize_septic_shock(
     # ==================== YOUR CODE HERE ====================
     # IDs and time key
     keys = ["subject_id", "hadm_id", "icustay_id", "charttime"]
+   
+    # Drop any remaining duplicate key rows (defensive)
+    # merged = merged.drop_duplicates(subset=keys, keep="last")
 
-    # Keep minimal columns and coerce to expected types
-    base_cols = keys + ["severe_sepsis_status"]
-    base = dev_severe_sepsis[base_cols].copy() if "severe_sepsis_status" in dev_severe_sepsis.columns else dev_severe_sepsis[keys].copy()
+    septic_shock_summary = pd.merge(
+        dev_severe_sepsis,
+        hypotension_labels,
+        on=keys,
+        how="outer",
+    )
 
-    h = hypotension_labels.copy()
-    h = h[keys + ["hypotension"]] if "hypotension" in h.columns else h.assign(hypotension=False)[keys + ["hypotension"]]
-    # Coerce hypotension to boolean
-    if h["hypotension"].dtype != bool:
-        h["hypotension"] = (
-            h["hypotension"]
-            .replace({True: True, False: False, "TRUE": True, "FALSE": False, 1: True, 0: False})
-            .fillna(False)
-            .astype(bool)
-        )
+    # merge septic shock summary with fluids all
+    septic_shock_summary = pd.merge(
+        septic_shock_summary,
+        fluids_all,
+        on=keys,
+        how="outer",
+    )
 
-    f = fluids_all.copy()
-    f = f[keys + ["adequate_fluid"]] if "adequate_fluid" in f.columns else f.assign(adequate_fluid=False)[keys + ["adequate_fluid"]]
-    # Coerce adequate_fluid to boolean
-    if f["adequate_fluid"].dtype != bool:
-        f["adequate_fluid"] = (
-            f["adequate_fluid"]
-            .replace({True: True, False: False, "TRUE": True, "FALSE": False, 1: True, 0: False})
-            .fillna(False)
-            .astype(bool)
-        )
+    septic_shock_summary = septic_shock_summary.drop_duplicates(subset=keys, keep="last")
 
-    # Drop any exact duplicate key rows to avoid row-multiplication on merge
-    base = base.drop_duplicates(subset=keys, keep="last")
-    h = h.drop_duplicates(subset=keys, keep="last")
-    f = f.drop_duplicates(subset=keys, keep="last")
+    septic_shock_summary = septic_shock_summary.sort_values(keys)
 
-    # Full outer merge of all three sources
-    merged = pd.merge(base, h, on=keys, how="outer")
-    merged = pd.merge(merged, f, on=keys, how="outer")
+    septic_shock_summary = septic_shock_summary.groupby(["subject_id", "hadm_id", "icustay_id"], sort=False).apply(lambda x: x.fillna(method="ffill"))
 
-    # Sort for LOCF and forward-fill within subject/hadm/icu groups
-    merged = merged.sort_values(keys)
-    grp = ["subject_id", "hadm_id", "icustay_id"]
+    septic_shock_summary = septic_shock_summary.fillna(False)
 
-    indicator_cols = []
-    if "severe_sepsis_status" in merged.columns:
-        indicator_cols.append("severe_sepsis_status")
-    indicator_cols += [c for c in ["hypotension", "adequate_fluid"] if c in merged.columns]
-
-    if indicator_cols:
-        merged[indicator_cols] = merged.groupby(grp, sort=False)[indicator_cols].ffill()
-
-    # Fill any remaining missing indicators with False
-    for c in indicator_cols:
-        merged[c] = merged[c].fillna(False).astype(bool)
-
-    # Compute septic shock: severe sepsis AND hypotension AND adequate fluid
-    # If severe_sepsis_status isn't present for a row, treat as False
-    sev = merged.get("severe_sepsis_status", False)
-    hypot = merged.get("hypotension", False)
-    fluid = merged.get("adequate_fluid", False)
-    merged["septic_shock_status"] = sev.astype(bool) & hypot.astype(bool) & fluid.astype(bool)
-
-    # Return the 8 expected columns, ordered
-    cols_out = keys + ["severe_sepsis_status", "hypotension", "adequate_fluid", "septic_shock_status"]
-    septic_shock_summary = merged[cols_out].sort_values(keys).reset_index(drop=True)
+    septic_shock_summary["septic_shock_status"] = septic_shock_summary["severe_sepsis_status"] & septic_shock_summary["hypotension"] & septic_shock_summary["adequate_fluid"]
 
     # ==================== YOUR CODE HERE ====================
     
