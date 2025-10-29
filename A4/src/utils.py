@@ -46,14 +46,22 @@ def preprocess_dates(
             columns and formats in each list correspond 1-to-1, in order.
         inplace (bool): Whether or not to perform the operation in-place
     """
-
-    pass
-
-    # ==================== YOUR CODE HERE ====================
     
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
+    # Validate inputs
+    if len(date_columns) != len(date_formats):
+        raise ValueError("date_columns and date_formats must have the same length")
+
+    # Work in-place or on a copy
+    target_df = df if inplace else df.copy()
+
+    # Convert specified columns to timezone-aware UTC datetimes
+    for col, fmt in zip(date_columns, date_formats):
+        target_df[col] = pd.to_datetime(target_df[col], format=fmt, utc=True)
+
+    # Return only when not operating in-place
+    if not inplace:
+        return target_df
+
     
 
 
@@ -85,11 +93,24 @@ def join_and_clean_data(diagnosis_features, note_concept_features, heart_rate_fe
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Outer-join all feature matrices on subject_id
+    X = pd.merge(diagnosis_features, note_concept_features, on="subject_id", how="outer")
+    X = pd.merge(X, heart_rate_features, on="subject_id", how="outer")
+
+    # Impute heart rate feature columns with their column means
+    for col in ["latest_heart_rate", "time_wt_avg"]:
+        if col in X.columns:
+            X[col] = X[col].astype(float)
+            X[col] = X[col].fillna(X[col].mean())
+
+    # Replace all other NaNs with 0
+    X = X.fillna(0)
+
+    # Sort by subject_id ascending
+    if "subject_id" in X.columns:
+        X = X.sort_values("subject_id").reset_index(drop=True)
     # ==================== YOUR CODE HERE ====================
     
-
+    
     # Return the dataframe
     return X

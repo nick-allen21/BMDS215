@@ -48,9 +48,20 @@ def show_diagnosis_hist(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Count unique patient histories per ICD9 code
+    code_patient_counts = (
+        dx_features.groupby("icd9_code")["subject_id"].nunique().rename("patient_count")
+    )
+
+    # Histogram of code frequencies by number of unique patient histories
+    sns.histplot(code_patient_counts.values, bins="auto")
+    plt.xlabel("Patient Count")
+    plt.ylabel("Diagnosis Count")
+    plt.title("Distribution of Diagnosis Code Patient Counts")
+
+    if output_file is not None:
+        plt.savefig(output_file, bbox_inches="tight")
+    plt.show()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -86,9 +97,22 @@ def show_hr_plot(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    sns.kdeplot(
+        data=latest_hr_df,
+        x="latest_heart_rate",
+        hue="label",
+        common_norm=False,
+        fill=False,
+        bw_adjust=1.0,
+    )
+    plt.xlabel("Heart Rate (bpm)")
+    plt.ylabel("Density")
+    plt.title("Latest Heart Rate by Shock Label")
+    plt.legend(title="Shock Label")
+
+    if output_file is not None:
+        plt.savefig(output_file, bbox_inches="tight")
+    plt.show()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -123,13 +147,30 @@ def show_hr_time_plot(
     # This line sets the size of the plot
     plt.figure(figsize=(10, 6))
 
+    # Time difference (charttime - index_time) in hours
+    time_diff_hours = (
+        (latest_hr_df["charttime"] - latest_hr_df["index_time"]).dt.total_seconds() / 3600.0
+    )
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    plot_df = latest_hr_df.copy()
+    plot_df["time_diff_hours"] = time_diff_hours
+
+    sns.kdeplot(
+        data=plot_df,
+        x="time_diff_hours",
+        hue="label",
+        common_norm=False,
+        fill=False,
+        bw_adjust=1.0,
+    )
+    plt.xlabel("Time Difference: Chart Time - Index Time (hours)")
+    plt.ylabel("Density")
+    plt.title("Latest HR Time Difference by Shock Label")
+    plt.legend(title="Shock Label")
+
+    if output_file is not None:
+        plt.savefig(output_file, bbox_inches="tight")
+    plt.show()
 
 
 def show_hr_scatter(
@@ -167,10 +208,24 @@ def show_hr_scatter(
     # This line sets the size of the plot
     plt.figure(figsize=(10, 6))
 
+    merged = latest_hr_df.merge(
+        time_weighted_hr_df[["subject_id", "time_wt_avg"]], on="subject_id", how="inner"
+    )
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    sns.scatterplot(
+        data=merged,
+        x="latest_heart_rate",
+        y="time_wt_avg",
+        hue="label",
+        alpha=0.7,
+        edgecolor=None,
+    )
+    plt.xlabel("Latest Heart Rate (bpm)")
+    plt.ylabel("Time Weighted Avg Heart Rate (bpm)")
+    plt.title("Latest vs Time-Weighted Average Heart Rate")
+    plt.legend(title="Shock Label")
+
+    if output_file is not None:
+        plt.savefig(output_file, bbox_inches="tight")
+    plt.show()
+   

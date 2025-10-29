@@ -48,15 +48,60 @@ def get_diagnoses(
 
     # Overwrite this variable with the return value in your implementation
     dx = None
+   
+    # Validate required columns
+    required_adm = {"subject_id", "hadm_id", "admittime"}
+    if not required_adm.issubset(admissions.columns):
+        missing = required_adm - set(admissions.columns)
+        raise ValueError(f"Missing required columns in admissions: {missing}")
 
+    required_dx = {"subject_id", "hadm_id", "icd9_code"}
+    if not required_dx.issubset(diagnoses.columns):
+        missing = required_dx - set(diagnoses.columns)
+        raise ValueError(f"Missing required columns in diagnoses: {missing}")
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    required_labels = {"subject_id", "hadm_id", "index_time"}
+    if not required_labels.issubset(shock_labels.columns):
+        missing = required_labels - set(shock_labels.columns)
+        raise ValueError(f"Missing required columns in shock_labels: {missing}")
 
+    # Merge diagnoses with admissions to get admittime as diagnosis_time
+    dx_adm = pd.merge(
+        diagnoses[["subject_id", "hadm_id", "icd9_code"]],
+        admissions[["subject_id", "hadm_id", "admittime"]],
+        on=["subject_id", "hadm_id"],
+        how="inner",
+    ).rename(columns={"admittime": "diagnosis_time"})
+
+    # Merge with shock_labels to attach each subject's index_time for their index admission
+    # Join on subject_id ONLY so we include diagnoses from prior admissions as well
+    dx_joined = pd.merge(
+        dx_adm,
+        shock_labels[["subject_id", "index_time", "hadm_id"]]
+        .rename(columns={"hadm_id": "index_hadm_id"}),
+        on=["subject_id"],
+        how="inner",
+    )
+
+    # Ensure datetime types
+    dx_joined["diagnosis_time"] = pd.to_datetime(dx_joined["diagnosis_time"], utc=True, errors="coerce")
+    dx_joined["index_time"] = pd.to_datetime(dx_joined["index_time"], utc=True, errors="coerce")
+
+    # Keep diagnoses strictly before index_time
+    mask = (dx_joined["diagnosis_time"] < dx_joined["index_time"]) & (
+        dx_joined["hadm_id"] != dx_joined["index_hadm_id"]
+    )
+    dx = dx_joined.loc[mask, [
+        "subject_id",
+        "hadm_id",
+        "diagnosis_time",
+        "icd9_code",
+        "index_time",
+    ]].reset_index(drop=True)
+    
+    # De-duplicate potential repeated coding entries if present
+    dx = dx.drop_duplicates(subset=["subject_id", "hadm_id", "icd9_code", "diagnosis_time"]).reset_index(drop=True)
+    
     return dx
 
 
@@ -94,14 +139,22 @@ def calc_ic(dx_features: pd.DataFrame, all_patients_count: int) -> pd.DataFrame:
     # Overwrite this variable with the return value in your implementation
     icd9_ic = None
 
+    # Validate inputs
+    required_cols = {"icd9_code", "subject_id"}
+    if not required_cols.issubset(dx_features.columns):
+        missing = required_cols - set(dx_features.columns)
+        raise ValueError(f"Missing required columns in dx_features: {missing}")
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    # Count unique patients per ICD9 code
+    counts = (
+        dx_features.groupby("icd9_code")["subject_id"]
+        .nunique()
+        .reset_index(name="patient_count")
+    )
 
+    # Compute IC = -log2(p), where p = patient_count / all_patients_count
+    probs = counts["patient_count"] / float(all_patients_count)
+    icd9_ic = counts.assign(IC=-np.log2(probs))[["icd9_code", "IC"]]
     return icd9_ic
 
 
@@ -131,11 +184,21 @@ def filter_ic(dx_features: pd.DataFrame, icd9_ic: pd.DataFrame) -> pd.DataFrame:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Validate inputs
+    if "icd9_code" not in dx_features.columns:
+        raise ValueError("dx_features must contain 'icd9_code'")
+    required_ic_cols = {"icd9_code", "IC"}
+    if not required_ic_cols.issubset(icd9_ic.columns):
+        missing = required_ic_cols - set(icd9_ic.columns)
+        raise ValueError(f"icd9_ic missing required columns: {missing}")
+
+    # Select codes with 4 <= IC <= 9 (inclusive)
+    allowed_codes = set(icd9_ic.loc[(icd9_ic["IC"] >= 4) & (icd9_ic["IC"] <= 9), "icd9_code"])
+
+    # Filter dx_features to those codes, preserve original columns
+    dx_filtered = dx_features.loc[dx_features["icd9_code"].isin(allowed_codes)].reset_index(drop=True)
     # ==================== YOUR CODE HERE ====================
-    
+
 
     return dx_filtered
 
@@ -184,12 +247,50 @@ def get_diagnosis_features(dx_selected: pd.DataFrame) -> pd.DataFrame:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Validate inputs
+    required_cols = {"subject_id", "diagnosis_time", "icd9_code", "index_time"}
+    if not required_cols.issubset(dx_selected.columns):
+        missing = required_cols - set(dx_selected.columns)
+        raise ValueError(f"dx_selected missing required columns: {missing}")
+
+    df = dx_selected.copy()
+    # Time delta in days between index_time and diagnosis_time
+    delta_days = (pd.to_datetime(df["index_time"]) - pd.to_datetime(df["diagnosis_time"])) \
+        .dt.total_seconds() / 86400.0
+
+    # Define bins: RECENT if within 6 months (<= 6*30.44 days), else PRIOR
+    six_months_days = 6 * 30.44
+    df["time_bin"] = np.where(delta_days <= six_months_days, "RECENT", "PRIOR")
+
+    # Count occurrences per subject, code, and time_bin
+    counts = (
+        df.groupby(["subject_id", "icd9_code", "time_bin"])  
+          .size()
+          .reset_index(name="count")
+    )
+
+    # Feature column names: RECENT_<code> and PRIOR_<code>
+    counts["feature"] = counts["time_bin"] + "_" + counts["icd9_code"].astype(str)
+
+    # Pivot to wide patient-feature matrix
+    pivot = counts.pivot_table(
+        index="subject_id",
+        columns="feature",
+        values="count",
+        aggfunc="sum",
+        fill_value=0,
+    )
+
+    # Ensure subject_id is a column and counts are integers
+    pivot = pivot.reset_index()
+    for col in pivot.columns:
+        if col != "subject_id":
+            pivot[col] = pivot[col].astype(int)
+
+    patient_diagnosis_features = pivot
     # ==================== YOUR CODE HERE ====================
     
-
+    
     return patient_diagnosis_features
 
 

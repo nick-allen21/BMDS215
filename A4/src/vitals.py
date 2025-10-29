@@ -50,12 +50,23 @@ def filter_vitals(
     # Overwrite this variable with the return value in your implementation
     filtered_vitals = None
 
+    # Keep only requested vital_ids
+    vitals_keep = vitals.loc[vitals["vital_id"].isin(vitals_to_keep)].copy()
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
+    # Attach index_time and label by joining on subject and the index admission (hadm_id)
+    merged = pd.merge(
+        vitals_keep,
+        shock_labels[["subject_id", "hadm_id", "icustay_id", "index_time", "label"]],
+        on=["subject_id", "hadm_id", "icustay_id"],
+        how="inner",
+    )
+
+    # Ensure datetime types
+    merged["charttime"] = pd.to_datetime(merged["charttime"], utc=True, errors="coerce")
+    merged["index_time"] = pd.to_datetime(merged["index_time"], utc=True, errors="coerce")
+
+    # Strictly before index_time
+    filtered_vitals = merged.loc[merged["charttime"] < merged["index_time"]].reset_index(drop=True)
     
 
     return filtered_vitals
@@ -89,9 +100,25 @@ def get_latest_hr(heart_rates: pd.DataFrame) -> pd.DataFrame:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Ensure datetime types
+    df = heart_rates.copy()
+    df["charttime"] = pd.to_datetime(df["charttime"], utc=True, errors="coerce")
+    df["index_time"] = pd.to_datetime(df["index_time"], utc=True, errors="coerce")
+
+    # Keep only measurements strictly before index_time (safety if not pre-filtered)
+    df = df.loc[df["charttime"] < df["index_time"]]
+
+    # For each subject, pick the row with the latest charttime
+    idx = df.groupby("subject_id")["charttime"].idxmax()
+    latest = df.loc[idx, [
+        "subject_id",
+        "charttime",
+        "valuenum",
+        "index_time",
+        "label",
+    ]].rename(columns={"valuenum": "latest_heart_rate"}).reset_index(drop=True)
+
+    latest_hr_df = latest
     # ==================== YOUR CODE HERE ====================
     
 
@@ -156,10 +183,26 @@ def get_time_weighted_hr(heart_rates: pd.DataFrame) -> pd.DataFrame:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Ensure datetime and filter to strictly before index_time
+    df = heart_rates.copy()
+    df["charttime"] = pd.to_datetime(df["charttime"], utc=True, errors="coerce")
+    df["index_time"] = pd.to_datetime(df["index_time"], utc=True, errors="coerce")
+    df = df.loc[df["charttime"] < df["index_time"]].dropna(subset=["valuenum"]) 
+
+    # Compute weights: w = exp(-(|dt| + 1)), where dt is in hours
+    dt_hours = (df["charttime"] - df["index_time"]).dt.total_seconds().abs() / 3600.0
+    df["weight"] = np.exp(-(dt_hours + 1.0))
+    df["xw"] = df["valuenum"] * df["weight"]
+
+    # Aggregate per subject
+    sum_w = df.groupby("subject_id")["weight"].sum()
+    sum_xw = df.groupby("subject_id")["xw"].sum()
+    result = (
+        pd.DataFrame({"subject_id": sum_w.index, "time_wt_avg": (sum_xw / sum_w).values})
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna(subset=["time_wt_avg"]).reset_index(drop=True)
+    )
     # ==================== YOUR CODE HERE ====================
     
-
+    
     return result

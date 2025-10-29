@@ -40,13 +40,20 @@ def filter_admissions(admissions: pd.DataFrame) -> pd.DataFrame:
     # Overwrite this variable with the return value
     filtered_admissions = None
 
+    # Validate required columns
+    required_cols = {"admittime", "dischtime"}
+    if not required_cols.issubset(admissions.columns):
+        missing = required_cols - set(admissions.columns)
+        raise ValueError(f"Missing required columns: {missing}")
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    # Compute admission durations in hours without modifying input
+    admit_dt = pd.to_datetime(admissions["admittime"], utc=True, errors="coerce")
+    disc_dt = pd.to_datetime(admissions["dischtime"], utc=True, errors="coerce")
+    durations = disc_dt - admit_dt
+
+    # Keep rows with duration > 12 hours
+    mask = durations >= timedelta(hours=12)
+    filtered_admissions = admissions.loc[mask].copy()
 
     return filtered_admissions
 
@@ -78,13 +85,30 @@ def merge_and_create_times(
     merged_df = None
 
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    # Merge cohort labels (many rows per admission with charttime + labels)
+    # with filtered admissions (one row per admission with admit/discharge).
+    # Join on subject_id and hadm_id, keeping relevant columns.
+    required_cols_cohort = {"subject_id", "hadm_id", "icustay_id", "charttime"}
+    if not required_cols_cohort.issubset(cohort_labels.columns):
+        missing = required_cols_cohort - set(cohort_labels.columns)
+        raise ValueError(f"Missing required columns in cohort_labels: {missing}")
 
+    required_cols_adm = {"subject_id", "hadm_id", "admittime", "dischtime"}
+    if not required_cols_adm.issubset(admissions.columns):
+        missing = required_cols_adm - set(admissions.columns)
+        raise ValueError(f"Missing required columns in admissions: {missing}")
+
+    merged_df = pd.merge(
+        cohort_labels,
+        admissions[["subject_id", "hadm_id", "admittime", "dischtime"]],
+        on=["subject_id", "hadm_id"],
+        how="inner",
+    )
+
+    # Add relative_charttime and index_time inplace
+    get_relative_charttime(merged_df)
+    get_index_time(merged_df)
+    
     return merged_df
 
 
@@ -106,13 +130,20 @@ def get_relative_charttime(admissions: pd.DataFrame) -> None:
     Parameters:
         admissions (pd.DataFrame): The admissions DataFrame to be modified
     """
-    # Implement your code in the space provided below.
-    pass
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Validate required columns
+    required_cols = {"admittime", "charttime"}
+    if not required_cols.issubset(admissions.columns):
+        missing = required_cols - set(admissions.columns)
+        raise ValueError(f"Missing required columns: {missing}")
+
+    # Ensure datetime types (should already be preprocessed per notebook)
+    adm = pd.to_datetime(admissions["admittime"], utc=True, errors="coerce")
+    cht = pd.to_datetime(admissions["charttime"], utc=True, errors="coerce")
+
+    # Unrounded floating point number of hours between times
+    admissions["relative_charttime"] = (cht - adm).dt.total_seconds() / 3600.0
     # ==================== YOUR CODE HERE ====================
     
 
@@ -133,13 +164,14 @@ def get_index_time(admissions: pd.DataFrame) -> None:
     Parameters:
         admissions (pd.DataFrame): The admissions DataFrame to be modified
     """
-    # Implement your code in the space provided below.
-    pass
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Validate required column
+    if "admittime" not in admissions.columns:
+        raise ValueError("Missing required column: admittime")
+
+    adm = pd.to_datetime(admissions["admittime"], utc=True, errors="coerce")
+    admissions["index_time"] = adm + timedelta(hours=12)
     # ==================== YOUR CODE HERE ====================
     
 
@@ -186,13 +218,81 @@ def get_shock_labels(merged_cohort: pd.DataFrame) -> pd.DataFrame:
     # Overwrite this variable with the return value
     label_df = None
 
+    # Validate required columns
+    required_cols = {
+        "subject_id",
+        "hadm_id",
+        "icustay_id",
+        "admittime",
+        "dischtime",
+        "charttime",
+        "index_time",
+        "septic_shock",
+    }
+    if not required_cols.issubset(merged_cohort.columns):
+        missing = required_cols - set(merged_cohort.columns)
+        raise ValueError(f"Missing required columns in merged_cohort: {missing}")
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    df = merged_cohort.copy()
+
+    # Ensure datetime types (should have been preprocessed)
+    df["admittime"] = pd.to_datetime(df["admittime"], utc=True, errors="coerce")
+    df["dischtime"] = pd.to_datetime(df["dischtime"], utc=True, errors="coerce")
+    df["charttime"] = pd.to_datetime(df["charttime"], utc=True, errors="coerce")
+    df["index_time"] = pd.to_datetime(df["index_time"], utc=True, errors="coerce")
+
+    # Consider septic shock events that occur during the admission window
+    during_admission = (df["charttime"] > df["admittime"]) & (df["charttime"] < df["dischtime"])
+    shock_events = df.loc[during_admission & (df["septic_shock"].astype(str).str.upper() == "TRUE")]
+
+    # Earliest septic shock time per admission
+    earliest_shock = (
+        shock_events.sort_values("charttime").groupby(["subject_id", "hadm_id", "icustay_id"], as_index=False)[
+            "charttime"
+        ].first()
+    )
+    earliest_shock = earliest_shock.rename(columns={"charttime": "earliest_shock_time"})
+
+    # unique admissions
+    base_cols = ["subject_id", "hadm_id", "icustay_id", "admittime", "dischtime", "index_time"]
+    admissions_unique = df[base_cols].drop_duplicates()
+
+    # Merge earliest shock times
+    admissions_with_shock = pd.merge(
+        admissions_unique,
+        earliest_shock,
+        on=["subject_id", "hadm_id", "icustay_id"],
+        how="left",
+    )
+
+    # Determine label based on earliest shock time
+    hours_to_shock = (
+        (admissions_with_shock["earliest_shock_time"] - admissions_with_shock["admittime"])
+        .dt.total_seconds()
+        .div(3600.0)
+    )
+
+    # Eligibility and label rules
+    # - Positive if shock occurs at > 15 hours after admission
+    # - Exclude if shock occurs before 15 hours
+    # - Negative if no shock during admission
+    admissions_with_shock["label"] = (
+        (hours_to_shock > 15).fillna(False)
+    )
+    eligible_mask = admissions_with_shock["label"] | hours_to_shock.isna()
+    eligible = admissions_with_shock.loc[eligible_mask].copy()
+
+    # For subjects with multiple eligible admissions, keep the latest admission (max admittime)
+    idx_latest = eligible.groupby("subject_id")["admittime"].idxmax()
+    label_df = eligible.loc[idx_latest, [
+        "subject_id",
+        "hadm_id",
+        "icustay_id",
+        "admittime",
+        "dischtime",
+        "index_time",
+        "label",
+    ]].sort_values("subject_id").reset_index(drop=True)
 
     return label_df
 
