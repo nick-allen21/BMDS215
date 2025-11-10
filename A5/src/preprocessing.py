@@ -70,9 +70,18 @@ def split_labels_and_features(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Work on a copy to avoid mutating the input dataframe
+    df = patient_feature_matrix.copy(deep=True)
+
+    # Convert non-numeric/categorical columns using provided mappings
+    for col, value_map in column_value_map.items():
+        if col in df.columns:
+            # replace keeps unmapped values intact (safer than map which yields NaN)
+            df[col] = df[col].replace(value_map)
+
+    # Split into features and labels and set index to subject_id
+    features = df.drop(columns=["death_in_stay"]).set_index("subject_id")
+    labels = df[["subject_id", "death_in_stay"]].set_index("subject_id")[["death_in_stay"]]
     # ==================== YOUR CODE HERE ====================
     
 
@@ -119,12 +128,40 @@ def feature_variance_threshold(
     # Overwrite this return variable in your implementation
     filtered_features = None
 
+    # Do not modify the input dataframe
+    df = features.copy(deep=True)
 
-    # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
+    kept_columns = []
+    total_rows = len(df)
 
+    for column_name in df.columns:
+        column_series = df[column_name]
+
+        # Work with non-null values for uniqueness and frequency calculations
+        non_null_series = column_series.dropna()
+
+        # Rule 1: If the feature has only one unique non-null value -> remove
+        unique_non_null_count = non_null_series.nunique()
+        if unique_non_null_count <= 1:
+            continue
+
+        # Frequency-based rule using most common and second most common
+        value_counts = non_null_series.value_counts()
+        # At this point we know there are at least 2 unique values
+        most_common = value_counts.iloc[0]
+        second_most_common = value_counts.iloc[1]
+        freq_ratio = most_common / second_most_common
+
+        # Uniqueness ratio relative to total number of rows (including null rows)
+        unique_ratio = unique_non_null_count / total_rows if total_rows > 0 else 0.0
+
+        # Keep if either:
+        # - freq ratio is less than cutoff, or
+        # - unique ratio is greater than cutoff
+        if (freq_ratio < freq_cut) or (unique_ratio > unique_cut):
+            kept_columns.append(column_name)
+        # else: remove (i.e., do not append)
+
+    filtered_features = df[kept_columns]
+    
     return filtered_features

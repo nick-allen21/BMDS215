@@ -79,9 +79,21 @@ def run_logistic_regression(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Align indices and build modeling dataframe
+    common_index = filtered_features.index.intersection(labels.index)
+    X = filtered_features.loc[common_index]
+    y = labels.loc[common_index]
+
+    # Choose features
+    feature_cols = X.columns.tolist() if selected_features is None else selected_features
+
+    # Assemble modeling DataFrame
+    modeling_df = pd.concat([y, X[feature_cols]], axis=1)
+
+    # Build formula and fit GLM (logistic regression)
+    formula = create_formula_string(outcome_col="death_in_stay", feature_col_list=feature_cols)
+    glm = smf.glm(formula=formula, data=modeling_df, family=sm.families.Binomial())
+    result = glm.fit()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -118,9 +130,10 @@ def create_formula_string(outcome_col: str, feature_col_list: List[str]) -> str:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Create a formula string: "outcome ~ feature_1 + feature_2 + ... + feature_n"
+    # Assume feature_col_list is non-empty per assignment description
+    rhs = " + ".join(feature_col_list)
+    formula_string = f"{outcome_col} ~ {rhs}"
     # ==================== YOUR CODE HERE ====================
     
 

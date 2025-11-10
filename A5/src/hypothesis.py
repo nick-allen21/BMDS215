@@ -73,9 +73,39 @@ def multi_ttest(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Align on shared index without mutating inputs
+    common_index = filtered_features.index.intersection(label_df.index)
+    features_aligned = filtered_features.loc[common_index]
+    labels_aligned = label_df.loc[common_index, "death_in_stay"]
+
+    # Select columns whose name contains the provided substring
+    cols_to_test = [c for c in features_aligned.columns if column_substring in c]
+
+    results_records = []
+    for col in cols_to_test:
+        # Split into two independent groups based on label (0 = survived, 1 = died)
+        group_died = features_aligned.loc[labels_aligned == 1, col].dropna()
+        group_surv = features_aligned.loc[labels_aligned == 0, col].dropna()
+
+        # Perform Welch's t-test (independent samples, unequal variances)
+        stat_res = ttest_ind(group_died, group_surv, equal_var=False)
+        p_value = getattr(stat_res, "pvalue", stat_res[1])  # support older scipy tuple return
+
+        results_records.append({"column_name": col, "p_value": float(p_value)})
+
+    # Create results DataFrame
+    ttest_results = pd.DataFrame(results_records, columns=["column_name", "p_value"])
+
+    # Bonferroni correction threshold
+    num_tests = len(ttest_results)
+    bonferroni_alpha = (alpha / num_tests) if num_tests > 0 else alpha
+
+    # Determine significance and collect significant columns
+    ttest_results["reject_null"] = ttest_results["p_value"] < bonferroni_alpha
+    sig_columns = ttest_results.loc[ttest_results["reject_null"], "column_name"].tolist()
+
+    # Sort by p-value for readability
+    ttest_results = ttest_results.sort_values("p_value", ascending=True).reset_index(drop=True)
     # ==================== YOUR CODE HERE ====================
     
 
