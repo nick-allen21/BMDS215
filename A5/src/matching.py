@@ -57,9 +57,29 @@ def plot_logit_scores(propensity_scores: pd.DataFrame, output_file: str) -> None
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Work on a copy to avoid mutating the input
+    df = propensity_scores.copy(deep=True)
+    # Compute logit of propensity scores
+    df["logit_p"] = df["propensity_score"].apply(safe_logit)
+
+    # Density plot stratified by oxy_drop status
+    sns.kdeplot(
+        data=df,
+        x="logit_p",
+        hue="oxy_drop",
+        common_norm=False,
+        fill=True,
+        alpha=0.5,
+        linewidth=0,
+    )
+    plt.xlabel("logit(P)")
+    plt.ylabel("Density")
+    plt.title("Density Plot of logit(P)")
+
+    # Save if requested
+    if output_file is not None:
+        plt.savefig(output_file, bbox_inches="tight")
+    plt.show()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -137,9 +157,36 @@ def caliper_match(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Copy and compute logit propensity for all patients
+    df = propensity_scores.copy(deep=True)
+    df["logit_p"] = df["propensity_score"].apply(safe_logit)
+
+    # Caliper threshold based on SD of all logit scores
+    caliper_threshold = df["logit_p"].std() * caliper
+
+    # Split by treatment (oxy_drop == 1) vs control (0)
+    treated = df[df["oxy_drop"] == 1][["logit_p"]]
+    control = df[df["oxy_drop"] == 0][["logit_p"]]
+
+    # Available control ids set for matching without replacement
+    available_controls = set(control.index.tolist())
+
+    # For determinism, iterate treated in ascending logit
+    for tid, trow in treated.sort_values("logit_p").iterrows():
+        if not available_controls:
+            break
+        # Candidate control pool
+        cand = control.loc[list(available_controls)]
+        # Find closest by absolute difference in logit
+        diffs = (cand["logit_p"] - trow["logit_p"]).abs()
+        closest_cid = diffs.idxmin()
+        min_diff = diffs.loc[closest_cid]
+
+        # Accept match if within caliper
+        if np.isfinite(min_diff) and min_diff <= caliper_threshold:
+            matches.append((int(tid), int(closest_cid)))
+            available_controls.remove(closest_cid)
+        # else: no match for this treated unit
     # ==================== YOUR CODE HERE ====================
     
 
