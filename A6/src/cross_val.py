@@ -60,9 +60,30 @@ def logistic_regression_cv(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Base logistic regression model configuration
+    log_reg = LogisticRegression(
+        penalty="l2",
+        solver="lbfgs",
+        random_state=random_state,
+        max_iter=max_iter,
+    )
+
+    # Map lambdas (regularization strength) to sklearn's C (inverse strength)
+    Cs = 1.0 / np.asarray(lambdas, dtype=float)
+
+    # Grid over C only; other params fixed in estimator
+    param_grid = {"C": Cs}
+
+    log_reg_cv = GridSearchCV(
+        estimator=log_reg,
+        param_grid=param_grid,
+        scoring="roc_auc",
+        cv=k_folds,
+        n_jobs=-1,
+    )
+
+    # Fit CV
+    log_reg_cv.fit(train_features, np.ravel(train_labels))
     # ==================== YOUR CODE HERE ====================
     
 
@@ -107,9 +128,22 @@ def gradient_boosting_cv(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Base Gradient Boosting model
+    grad_boost = GradientBoostingClassifier(random_state=random_state)
+
+    # Parameter grid over number of estimators
+    param_grid = {"n_estimators": np.asarray(n_estimators_list, dtype=int)}
+
+    grad_boost_cv = GridSearchCV(
+        estimator=grad_boost,
+        param_grid=param_grid,
+        scoring="roc_auc",
+        cv=k_folds,
+        n_jobs=-1,
+    )
+
+    # Fit CV
+    grad_boost_cv.fit(train_features, np.ravel(train_labels))
     # ==================== YOUR CODE HERE ====================
     
 

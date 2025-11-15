@@ -46,9 +46,19 @@ def logistic_regression(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Map lambda_ (regularization strength) to sklearn's C (inverse of regularization)
+    # Guard against lambda_ == 0 to avoid division by zero; use a very large C instead.
+    C_value = (1.0 / lambda_) if lambda_ > 0 else 1e12
+
+    log_reg_model = LogisticRegression(
+        penalty="l2",
+        solver="lbfgs",
+        random_state=random_state,
+        max_iter=max_iter,
+        C=C_value,
+    )
+    # Fit the model to the training data
+    log_reg_model.fit(X_train, np.ravel(Y_train))
     # ==================== YOUR CODE HERE ====================
     
 
@@ -92,9 +102,11 @@ def gradient_boosted_tree(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    grad_boost_model = GradientBoostingClassifier(
+        n_estimators=n_estimators,
+        random_state=random_state,
+    )
+    grad_boost_model.fit(X_train, np.ravel(Y_train))
     # ==================== YOUR CODE HERE ====================
     
 
@@ -127,9 +139,7 @@ def get_log_reg_coefficients(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    coefficients = log_reg.coef_.ravel().tolist()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -162,9 +172,7 @@ def get_tree_feature_importance(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    feature_importances = gbt.feature_importances_.ravel().tolist()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -235,9 +243,35 @@ def get_top_features(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Extract names and values
+    feature_names = features.columns.tolist()
+    values_arr = np.asarray(values).ravel()
+
+    # Build dataframe of feature values
+    df = pd.DataFrame({"feature": feature_names, value_type: values_arr})
+
+    # Add absolute value column
+    abs_col = "abs_coef" if value_type == "coef" else "abs_importance"
+    df[abs_col] = np.abs(df[value_type])
+
+    # Merge in feature descriptions on feature name
+    # Expecting columns: feature, feature_type, description
+    meta_cols = ["feature", "feature_type", "description"]
+    # Guard in case feature_descriptions has extra columns
+    if all(col in feature_descriptions.columns for col in meta_cols[1:]):
+        meta_df = feature_descriptions[meta_cols]
+    else:
+        # Fallback: try to find likely columns
+        meta_df = feature_descriptions
+
+    merged = df.merge(meta_df, on="feature", how="left")
+
+    # Sort by absolute value and take top k
+    merged = merged.sort_values(by=abs_col, ascending=False).head(k)
+
+    # Order columns
+    ordered_cols = ["feature", "feature_type", "description", value_type, abs_col]
+    top_k_features = merged[ordered_cols].reset_index(drop=True)
     # ==================== YOUR CODE HERE ====================
     
 

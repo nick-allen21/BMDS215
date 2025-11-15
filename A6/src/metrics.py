@@ -37,14 +37,16 @@ def accuracy(test_labels: np.ndarray, test_predictions: np.ndarray) -> float:
     # Overwrite this variable in your implementation
     acc = None
 
+    # ==================== YOUR CODE HERE ====================
+    labels = np.asarray(test_labels).ravel()
+    preds = np.asarray(test_predictions).ravel()
 
+    if labels.size == 0:
+        acc = 0.0
+    else:
+        acc = float(np.mean(labels == preds))
     # ==================== YOUR CODE HERE ====================
     
-    # TODO: Implement
-    
-    # ==================== YOUR CODE HERE ====================
-    
-
     return acc
 
 
@@ -78,9 +80,19 @@ def confusion_matrix(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    y_true = np.asarray(test_labels).ravel()
+    y_pred = np.asarray(test_predictions).ravel()
+
+    # Compute counts
+    tn = int(np.sum((y_true == 0) & (y_pred == 0)))
+    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
+    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
+
+    con_mat[0, 0] = tn  # true 0, pred 0
+    con_mat[0, 1] = fp  # true 0, pred 1
+    con_mat[1, 0] = fn  # true 1, pred 0
+    con_mat[1, 1] = tp  # true 1, pred 1
     # ==================== YOUR CODE HERE ====================
     
 
@@ -112,9 +124,10 @@ def sensitivity(con_mat: np.ndarray) -> float:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    tp = float(con_mat[1, 1])
+    fn = float(con_mat[1, 0])
+    denom = tp + fn
+    sens = 0.0 if denom == 0 else tp / denom
     # ==================== YOUR CODE HERE ====================
     
 
@@ -146,9 +159,10 @@ def specificity(con_mat: np.ndarray) -> float:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    tn = float(con_mat[0, 0])
+    fp = float(con_mat[0, 1])
+    denom = tn + fp
+    spec = 0.0 if denom == 0 else tn / denom
     # ==================== YOUR CODE HERE ====================
     
 
@@ -179,9 +193,10 @@ def precision(con_mat: np.ndarray) -> float:
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    tp = float(con_mat[1, 1])
+    fp = float(con_mat[0, 1])
+    denom = tp + fp
+    prec = 0.0 if denom == 0 else tp / denom
     # ==================== YOUR CODE HERE ====================
     
 

@@ -39,9 +39,17 @@ def display_partial_dependence(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    sns.set()
+    plt.figure()
+    PartialDependenceDisplay.from_estimator(
+        model,
+        X=features,
+        features=feature_names,
+        kind="average",
+    )
+    plt.tight_layout()
+    if filename is not None:
+        plt.savefig(filename, bbox_inches="tight")
     # ==================== YOUR CODE HERE ====================
     
 
@@ -79,9 +87,33 @@ def display_age_distribution(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    sns.set()
+    plt.figure()
+
+    # Build a small dataframe with age and label for plotting
+    plot_df = pd.DataFrame(
+        {
+            "age_in_days": features["age_in_days"],
+            "died": labels["death_in_stay"],
+        }
+    )
+
+    sns.histplot(
+        data=plot_df,
+        x="age_in_days",
+        hue="died",
+        bins=30,
+        element="step",
+        stat="density",
+        common_norm=False,
+        alpha=0.4,
+    )
+    plt.xlabel("Age (days)")
+    plt.ylabel("Density")
+    plt.title("Age distribution by in-hospital death")
+
+    if filename is not None:
+        plt.savefig(filename, bbox_inches="tight")
     # ==================== YOUR CODE HERE ====================
     
 

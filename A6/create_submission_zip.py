@@ -17,7 +17,7 @@ If you are in the root directory for assignment 3 (titled "A3"), run the followi
 """
 
 
-SUNET_ID = ""  # TODO: Replace with your SUNet ID
+SUNET_ID = "nallen2"
 
 # =============================================================================
 # You do not need to modify anything below this line.

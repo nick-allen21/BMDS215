@@ -60,9 +60,25 @@ def split_data(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Set the random seed
+    np.random.seed(random_state)
+
+    # Generate a permutation of indices for the dataset
+    num_samples = features.shape[0]
+    permuted_indices = np.random.permutation(num_samples)
+
+    # Determine number of test samples (rounded to nearest integer)
+    num_test = int(np.round(test_fraction * num_samples))
+
+    # Split indices into test and train
+    test_indices = permuted_indices[:num_test]
+    train_indices = permuted_indices[num_test:]
+
+    # Create train/test splits without modifying input dataframes
+    X_test = features.iloc[test_indices].copy()
+    Y_test = labels.iloc[test_indices].copy()
+    X_train = features.iloc[train_indices].copy()
+    Y_train = labels.iloc[train_indices].copy()
     # ==================== YOUR CODE HERE ====================
     
 

@@ -56,13 +56,26 @@ def calc_roc_curve(
     """
 
     # Overwrite this variable in your implementation
-    fprs, tpr = None, None
+    fprs, tprs = None, None
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    labels = np.asarray(test_labels).ravel()
+    probs = np.asarray(test_probabilites).ravel()
+
+    thresholds = np.linspace(0.0, 1.0, 1000)
+    fpr_list = []
+    tpr_list = []
+    for thr in thresholds:
+        preds = (probs >= thr).astype(int)
+        con_mat = confusion_matrix(labels, preds)
+        tpr_val = sensitivity(con_mat)
+        fpr_val = 1.0 - specificity(con_mat)
+        tpr_list.append(tpr_val)
+        fpr_list.append(fpr_val)
+
+    fprs = np.asarray(fpr_list)
+    tprs = np.asarray(tpr_list)
     # ==================== YOUR CODE HERE ====================
     
     return fprs, tprs
@@ -102,9 +115,22 @@ def display_roc_curve(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    # Plot each ROC curve
+    for (fprs, tprs), name in zip(fpr_tpr_list, model_name_list):
+        sns.lineplot(x=fprs, y=tprs, label=name)
+
+    # Diagonal random baseline
+    sns.lineplot(x=[0, 1], y=[0, 1], label="Random", linestyle="--", color="gray")
+
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve")
+    plt.legend()
+
+    if filename is not None:
+        plt.savefig(filename, bbox_inches="tight")
+    # Show the plot for interactive contexts
+    plt.show()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -146,9 +172,22 @@ def calc_precision_recall_curve(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    labels = np.asarray(test_labels).ravel()
+    probs = np.asarray(test_probabilites).ravel()
+
+    thresholds = np.linspace(0.0, 1.0, 1000)
+    prec_list = []
+    rec_list = []
+    for thr in thresholds:
+        preds = (probs >= thr).astype(int)
+        con_mat = confusion_matrix(labels, preds)
+        prec_val = precision(con_mat)
+        rec_val = sensitivity(con_mat)  # recall
+        prec_list.append(prec_val)
+        rec_list.append(rec_val)
+
+    precs = np.asarray(prec_list)
+    recalls = np.asarray(rec_list)
     # ==================== YOUR CODE HERE ====================
     
 
@@ -187,9 +226,17 @@ def display_precision_recall_curve(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    for (precs, recalls), name in zip(p_r_list, model_name_list):
+        sns.lineplot(x=recalls, y=precs, label=name)
+
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Precision-Recall Curve")
+    plt.legend()
+
+    if filename is not None:
+        plt.savefig(filename, bbox_inches="tight")
+    plt.show()
     # ==================== YOUR CODE HERE ====================
     
 
@@ -228,8 +275,25 @@ def display_calibration_plot(
 
 
     # ==================== YOUR CODE HERE ====================
-    
-    # TODO: Implement
-    
+    y_true = np.asarray(test_labels).ravel()
+    y_prob = np.asarray(test_probabilities).ravel()
+
+    frac_pos, mean_pred = calibration_curve(
+        y_true, y_prob, n_bins=10, strategy="uniform"
+    )
+
+    # calibration_curve returns (fraction_of_positives, mean_predicted_value)
+    plt.plot(mean_pred, frac_pos, marker="o", label="Model")
+    # Perfect calibration line
+    plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfectly calibrated")
+
+    plt.xlabel("Mean predicted probability")
+    plt.ylabel("Fraction of positives")
+    plt.title("Calibration Plot")
+    plt.legend()
+
+    if filename is not None:
+        plt.savefig(filename, bbox_inches="tight")
+    plt.show()
     # ==================== YOUR CODE HERE ====================
     
